@@ -1,0 +1,34 @@
+# Azure Agent MCP Server
+## 注意事項
+請更新.env的內容, 把這agent設定正確
+<pre>
+# Azure AI Agent Service connection string
+PROJECT_CONNECTION_STRING="eastus2.api.azureml.ms;846817e9-ac19-4006-9827-a125xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+# Default agent ID
+DEFAULT_AGENT_ID="asst_DVWlHohxxxxxxxxxxxxxxxxx" # Project Spec Agent
+</pre>
+
+## Local Test
+$ cd src/python/azure_agent_mcp_server/
+$ python __main__.py
+
+
+## VS code 設定 (setting.json)
+    "mcp": {
+        "servers": {
+            "my-mcp-server-project-spec-agent": {
+                "type": "stdio",
+                "command": "C:\\Users\\chihengchou\\Downloads\\work\\work\\mcp-foundry\\.venv\\Scripts\\python.exe",
+                "_command": "python",
+                "args": [
+                    "/Users/chihengchou/Downloads/work/work/mcp-foundry/src/python/azure_agent_mcp_server/__main__.py"
+                ]
+            }
+        }
+    }
+
+## 在 VS code 中使用
+- 請在Copilot Chat中選擇 agent mode
+- 點選工具圖示, 確認使用的工具是哪個
+- 或是使用 Hashtag query_default_agent, 就可以指定使用自己的agent
+- 或是使用list_agent, 就可以列出所有的agent, 然後再使用connect_agent, 來連接到指定的agent
