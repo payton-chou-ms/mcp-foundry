@@ -5,6 +5,7 @@ import sys
 import requests
 from mcp_foundry.mcp_server import mcp
 from dotenv import load_dotenv
+from mcp.server.fastmcp import Context
 
 # Configure logging (following the pattern from other tools)
 logging.basicConfig(
@@ -17,7 +18,7 @@ logger = logging.getLogger("mcp_foundry_finetuning")
 load_dotenv()
 
 @mcp.tool()
-def fetch_finetuning_status(job_id: str) -> str:
+async def fetch_finetuning_status(ctx: Context, job_id: str) -> dict:
     """
     Fetches the status of a fine-tuning job using Azure OpenAI API.
 
@@ -27,7 +28,7 @@ def fetch_finetuning_status(job_id: str) -> str:
     Returns:
     - Job status information as a JSON string.
     """
-    
+
     # Use consistent environment variable names following the codebase pattern
     project_endpoint = os.environ.get("PROJECT_ENDPOINT")
     api_version = os.environ.get("api-version")
@@ -39,8 +40,6 @@ def fetch_finetuning_status(job_id: str) -> str:
         })
 
     url = f"{project_endpoint}/openai/fine_tuning/jobs/{job_id}?api-version={api_version}"
-    #https://t-tanvikori-4765-resource.openai.azure.com//openai/fine_tuning/jobs/ftjob-6e6523ab1a5a4b1b80875305038c51fb?api-version=2025-04-28
-    #ftjob-6e6523ab1a5a4b1b80875305038c51fb
     headers = {
         "api-key": api_key,
         "Content-Type": "application/json"
@@ -62,6 +61,7 @@ def fetch_finetuning_status(job_id: str) -> str:
             "fine_tuned_model": job_data.get("fine_tuned_model"),
             "error": job_data.get("error", {})
         })
+
     except requests.exceptions.RequestException as e:
         logger.error(f"Request error fetching fine-tuning job status: {str(e)}")
         return json.dumps({"error": f"Request error: {str(e)}"})
