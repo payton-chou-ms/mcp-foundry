@@ -7,8 +7,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-@mcp.tool()
-async def fetch_finetuning_status(job_id: str) -> str:
+@mcp.tool(description ="Fetch the status of a fine-tuning job using Azure OpenAI API")
+def fetch_finetuning_status(job_id: str) -> str:
     """
     Fetches the status of a fine-tuning job using Azure OpenAI API.
 
