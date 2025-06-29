@@ -7,6 +7,7 @@ from mcp_foundry.mcp_server import mcp
 from dotenv import load_dotenv
 from mcp.server.fastmcp import Context
 
+
 # Configure logging (following the pattern from other tools)
 logging.basicConfig(
     level=logging.INFO,
@@ -18,7 +19,7 @@ logger = logging.getLogger("mcp_foundry_finetuning")
 load_dotenv()
 
 @mcp.tool()
-async def fetch_finetuning_status(ctx: Context, job_id: str) -> dict:
+def fetch_finetuning_status(ctx: Context, job_id: str) -> str:
     """
     Fetches the status of a fine-tuning job using Azure OpenAI API.
 
@@ -30,16 +31,16 @@ async def fetch_finetuning_status(ctx: Context, job_id: str) -> dict:
     """
 
     # Use consistent environment variable names following the codebase pattern
-    project_endpoint = os.environ.get("PROJECT_ENDPOINT")
-    api_version = os.environ.get("api-version")
-    api_key = os.environ.get("FOUNDRY_API_KEY")
+    azure_endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
+    api_version = os.environ.get("AZURE_OPENAI_API_VERSION")
+    api_key = os.environ.get("AZURE_OPENAI_API_KEY")
 
-    if not project_endpoint or not api_key:
+    if not azure_endpoint or not api_key:
         return json.dumps({
-            "error": "Missing required environment variables: 'AZURE_AI_PROJECT_ENDPOINT' or 'AZURE_OPENAI_API_KEY'."
+            "error": "Missing required environment variables: 'AZURE_OPENAI_ENDPOINT' or 'AZURE_OPENAI_API_KEY'."
         })
 
-    url = f"{project_endpoint}/openai/fine_tuning/jobs/{job_id}?api-version={api_version}"
+    url = f"{azure_endpoint}/openai/fine_tuning/jobs/{job_id}?api-version={api_version}"
     headers = {
         "api-key": api_key,
         "Content-Type": "application/json"
@@ -68,3 +69,6 @@ async def fetch_finetuning_status(ctx: Context, job_id: str) -> dict:
     except Exception as e:
         logger.error(f"Unexpected error fetching fine-tuning job status: {str(e)}")
         return json.dumps({"error": f"Unexpected error: {str(e)}"})
+
+# cd "c:\Internship\MCP-main\mcp-foundry"
+# python -c "import sys; sys.path.append('src'); from mcp_foundry.mcp_foundry_finetuning.tools import fetch_finetuning_status; print(fetch_finetuning_status(None, 'ftjob-6e6523ab1a5a4b1b80875305038c51fb'))"
