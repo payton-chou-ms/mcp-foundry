@@ -5,7 +5,7 @@ import sys
 import requests
 from mcp_foundry.mcp_server import mcp
 from dotenv import load_dotenv
-from mcp.server.fastmcp import Context
+
 
 
 # Configure logging (following the pattern from other tools)
@@ -18,8 +18,76 @@ logger = logging.getLogger("mcp_foundry_finetuning")
 
 load_dotenv()
 
+# Use consistent environment variable names following the codebase pattern
+azure_endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
+api_version = os.environ.get("AZURE_OPENAI_API_VERSION")
+api_key = os.environ.get("AZURE_OPENAI_API_KEY")
+
 @mcp.tool()
-def fetch_finetuning_status(ctx: Context, job_id: str) -> str:
+def list_finetuning_jobs():
+    """
+    MCP-compatible function to list all finetuning jobs using Azure OpenAI API.
+    Returns:
+        List of dictionaries containing job ID and status.
+    """
+
+    if not azure_endpoint or not api_key:
+        return json.dumps({
+            "error": "Missing required environment variables: 'AZURE_OPENAI_ENDPOINT' or 'AZURE_OPENAI_API_KEY'."
+        })
+
+    url = f"{azure_endpoint}/openai/fine_tuning/jobs?api-version={api_version}"
+    headers = {
+        "api-key": api_key,
+        "Content-Type": "application/json"
+    }
+
+    response = requests.get(url, headers=headers)
+
+    if response.status_code == 200:
+        jobs_data = response.json()
+        return [{"job_id": job["id"], "status": job["status"]} for job in jobs_data.get("data", [])]
+    else:
+        print(f"Failed to retrieve jobs. Status code: {response.status_code}")
+        return []
+    
+@mcp.tool()
+def get_finetuning_job_events(job_id: str):
+    """
+    MCP-compatible function to retrieve all events for a specific finetuning job.
+    Returns:
+        List of event details including timestamp and message.
+    """
+
+    if not azure_endpoint or not api_key:
+        return json.dumps({
+            "error": "Missing required environment variables: 'AZURE_OPENAI_ENDPOINT' or 'AZURE_OPENAI_API_KEY'."
+        })
+    
+    url = f"{azure_endpoint}/openai/fine_tuning/jobs/{job_id}/events?api-version={api_version}"
+    headers = {
+        "Content-Type": "application/json",
+        "api-key": api_key
+    }
+
+    response = requests.get(url, headers=headers)
+
+    if response.status_code == 200:
+        events_data = response.json()
+        return [
+            {
+                "timestamp": event.get("created_at"),
+                "message": event.get("message")
+            }
+            for event in events_data.get("data", [])
+        ]
+    else:
+        print(f"Failed to retrieve events. Status code: {response.status_code}")
+        return []
+
+
+@mcp.tool()
+def fetch_finetuning_status(job_id: str) -> str:
     """
     Fetches the status of a fine-tuning job using Azure OpenAI API.
 
@@ -29,11 +97,6 @@ def fetch_finetuning_status(ctx: Context, job_id: str) -> str:
     Returns:
     - Job status information as a JSON string.
     """
-
-    # Use consistent environment variable names following the codebase pattern
-    azure_endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
-    api_version = os.environ.get("AZURE_OPENAI_API_VERSION")
-    api_key = os.environ.get("AZURE_OPENAI_API_KEY")
 
     if not azure_endpoint or not api_key:
         return json.dumps({
