@@ -4,6 +4,7 @@ import logging
 import sys
 import requests
 from mcp_foundry.mcp_server import mcp
+from mcp.server.fastmcp import Context
 from dotenv import load_dotenv
 
 
@@ -24,9 +25,10 @@ api_version = os.environ.get("AZURE_OPENAI_API_VERSION")
 api_key = os.environ.get("AZURE_OPENAI_API_KEY")
 
 @mcp.tool()
-def list_finetuning_jobs():
+def list_finetuning_jobs(ctx: Context):
     """
     MCP-compatible function to list all finetuning jobs using Azure OpenAI API.
+    
     Returns:
         List of dictionaries containing job ID and status.
     """
@@ -52,9 +54,11 @@ def list_finetuning_jobs():
         return []
     
 @mcp.tool()
-def get_finetuning_job_events(job_id: str):
+def get_finetuning_job_events(ctx: Context, job_id: str):
     """
     MCP-compatible function to retrieve all events for a specific finetuning job.
+    It also returns the billing details and the loss trend for the job specified.
+
     Returns:
         List of event details including timestamp and message.
     """
@@ -87,7 +91,7 @@ def get_finetuning_job_events(job_id: str):
 
 
 @mcp.tool()
-def fetch_finetuning_status(job_id: str) -> str:
+def fetch_finetuning_status(ctx: Context, job_id: str) -> str:
     """
     Fetches the status of a fine-tuning job using Azure OpenAI API.
 
