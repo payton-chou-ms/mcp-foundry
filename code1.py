@@ -1,2 +1,0 @@
-#for pr
-print("Hi")
