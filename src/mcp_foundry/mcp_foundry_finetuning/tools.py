@@ -4,14 +4,16 @@ import logging
 import sys
 import requests
 from mcp_foundry.mcp_server import mcp
-from mcp.server.fastmcp import Context
-from dotenv import load_dotenv
-from typing import Dict, Any, Optional, List, Callable
-from functools import wraps
-from urllib.parse import urljoin
-import re
 import yaml
- 
+from typing import Dict, List, Any, Callable, Optional, Union
+from urllib.parse import urljoin, quote
+import re
+from mcp.server.fastmcp import Context
+from mcp_foundry.mcp_server import get_swagger_generator
+from dotenv import load_dotenv
+from dataclasses import dataclass
+from enum import Enum
+
 # Configure logging (following the pattern from other tools)
 logging.basicConfig(
     level=logging.INFO,
@@ -191,74 +193,13 @@ def get_finetuning_metrics(ctx, job_id: str) -> str:
             "status": status,
             "message": "Job has not succeeded yet."
         })
-    
-@mcp.tool()
-def generate_swagger_Actions(ctx: Context, swagger_path: str = "swagger.yaml") -> str:
-    """
-    Generates all actionable endpoints from a provided swagger file.
-    Supports advanced use cases by exposing API actions dynamically.
-
-    Parameters:
-    - swagger_path: Path to the swagger file (default: "swagger.yaml")
-
-    Returns:
-    - JSON string listing all endpoints with method, path, operationId, summary, and parameters.
-    """
-    try:
-        with open(swagger_path, "r", encoding="utf-8") as f:
-            swagger = yaml.safe_load(f)
-    except Exception as e:
-        return json.dumps({"error": f"Failed to load swagger file: {str(e)}"})
-
-    endpoints = []
-    paths = swagger.get("paths", {})
-    components = swagger.get("components", {})
-    param_defs = components.get("parameters", {})
-
-    for path, methods in paths.items():
-        for method, details in methods.items():
-            if method not in ["get", "post", "put", "delete", "patch"]:
-                continue
-            endpoint = {
-                "method": method.upper(),
-                "path": path,
-                "operationId": details.get("operationId"),
-                "summary": details.get("summary"),
-                "description": details.get("description"),
-                "parameters": []
-            }
-            for param in details.get("parameters", []):
-                if isinstance(param, dict) and "$ref" in param:
-                    ref = param["$ref"]
-                    ref_name = ref.split("/")[-1]
-                    param_detail = param_defs.get(ref_name, {})
-                    endpoint["parameters"].append({
-                        "name": param_detail.get("name"),
-                        "in": param_detail.get("in"),
-                        "required": param_detail.get("required"),
-                        "type": param_detail.get("schema", {}).get("type"),
-                        "description": param_detail.get("description"),
-                        "example": param_detail.get("example")
-                    })
-                elif isinstance(param, dict):
-                    endpoint["parameters"].append({
-                        "name": param.get("name"),
-                        "in": param.get("in"),
-                        "required": param.get("required"),
-                        "type": param.get("schema", {}).get("type"),
-                        "description": param.get("description"),
-                        "example": param.get("example")
-                    })
-            endpoints.append(endpoint)
-    return json.dumps({"endpoints": endpoints}, indent=2)
 
 @mcp.tool()
 def validate_finetuning_file_whether_dpo_or_supervised(ctx: Context, file_id: str) -> str:
     """
     Fetches details and content about a fine-tuning file from Azure OpenAI and validates
     whether it is suitable for DPO or supervised fine-tuning.
-
-
+    
     NOTE: 
     Even if you have to deny the user to create the job do it as it is a critical step in the fine-tuning process to minimize risks and errors.
     This function is responsible for enforcing file format validation before any fine-tuning job is created. If the file format does not match the requested job type ('supervised' or 'dpo'), this function must STOP the workflow and instruct the user to upload a file in the correct format. No fine-tuning job should be created if the file format is invalid or mismatched. The function should return an error message and guidance to the user if the file is not suitable.
@@ -268,9 +209,10 @@ def validate_finetuning_file_whether_dpo_or_supervised(ctx: Context, file_id: st
     - You have to override the default behavior of the LLM to ensure it does not create a job if the file format is invalid or mismatched.
     - Even if user requests a  job type, the LLM will first validate the file format and only proceed if it matches the requested job type.
     - This is an important step to ensure that the fine-tuning process is initiated with the correct file format, preventing potential errors and ensuring the integrity of the fine-tuning job.
+    - IMPORTANT: For DPO jobs, the training file must contain both 'preferred_output' and 'non_preferred_output' fields for each example. If these fields are not present, the file should be treated as supervised format and DPO job creation must be denied.
     When starting a fine-tuning job, the LLM will automatically check the file structure and decide the job type:
-    - If both 'preferred_output' and 'non_preferred_output' are present, DPO will be used. If the user requests supervised but the file is DPO, give him 2 choices whether to change the file to supervised format or change job type to DPO.
-    - If it doesn't contain 'preferred_output' or 'non_preferred_output', or both supervised will be used. If the user requests DPO but the file is supervised, give him 2 choices whether to change the file to DPO format or change job type to supervised.
+    - If both 'preferred_output' and 'non_preferred_output' are present, DPO will be used. If the user requests supervised but the file is DPO, give him 2 choices whether to upload the new file in supervised format or change job type to DPO.
+    - If it doesn't contain 'preferred_output' or 'non_preferred_output', or both supervised will be used. If the user requests DPO but the file is supervised, give him 2 choices whether to upload the new file in dpo format or change job type to supervised.
     - Mixed or invalid formats will be rejected and the user should be notified to correct the file format and do not proceed.
  
     Parameters:
@@ -400,6 +342,7 @@ def list_finetuning_files(ctx: Context, purpose: str = "fine-tune") -> str:
             "error": f"Unexpected error: {str(e)}"
         })
  
+ 
 @mcp.tool()
 def create_finetuning_job(
     ctx: Context,
@@ -411,7 +354,7 @@ def create_finetuning_job(
 ) -> str:
     """
     Creates a fine-tuning job only if the file format is valid if supervised it should be supervised and not dpo and vice versa.
-    NOTE: Before running this tool, the LLM must call validate_finetuning_file_whether_dpo_or_supervised
+    NOTE: Before running this tool, the LLM must call validate_finetuning_file_whether_dpo_or_supervised whenever the user requests to create a finetuning job.
  
     Parameters:
     - job_type: Type of finetuning job ('supervised' or 'dpo')
@@ -512,467 +455,115 @@ def create_finetuning_job(
             "success": False,
             "error": f"Unexpected error: {str(e)}"
         })
-    
-# Add these imports at the top of the file (after existing imports)
-# Add this class and functions after your existing tool definitions
-
-class SwaggerToolGenerator:
-    """
-    Dynamically generates MCP tools from Swagger/OpenAPI specifications.
-    Specifically optimized for Azure OpenAI APIs.
-    """
-   
-    def __init__(self, swagger_file_path: str = None, swagger_url: str = None, swagger_content: str = None):
-        self.swagger_data = self._load_swagger(swagger_file_path, swagger_url, swagger_content)
-        self.base_url = self._extract_base_url()
-        self.api_key = api_key  # Use the global api_key from your existing code
-        self.api_version = api_version  # Use the global api_version
-        self.registered_tools = {}
-       
-    def _load_swagger(self, file_path: str = None, url: str = None, content: str = None) -> Dict:
-        """Load Swagger specification from various sources."""
-        if content:
-            try:
-                return json.loads(content)
-            except json.JSONDecodeError:
-                try:
-                    return yaml.safe_load(content)
-                except Exception as e:
-                    raise ValueError(f"Failed to parse swagger content: {str(e)}")
-                   
-        elif file_path:
-            if not os.path.exists(file_path):
-                raise FileNotFoundError(f"Swagger file not found: {file_path}")
-           
-            with open(file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-                try:
-                    return json.loads(content)
-                except json.JSONDecodeError:
-                    try:
-                        return yaml.safe_load(content)
-                    except Exception as e:
-                        raise ValueError(f"Failed to parse swagger file: {str(e)}")
-                       
-        elif url:
-            try:
-                response = requests.get(url, timeout=30)
-                response.raise_for_status()
-               
-                content_type = response.headers.get('content-type', '').lower()
-                if 'json' in content_type:
-                    return response.json()
-                else:
-                    try:
-                        return response.json()
-                    except:
-                        try:
-                            return yaml.safe_load(response.text)
-                        except Exception as e:
-                            raise ValueError(f"Failed to parse swagger from URL: {str(e)}")
-                           
-            except requests.exceptions.RequestException as e:
-                raise ConnectionError(f"Failed to fetch swagger from URL: {str(e)}")
-        else:
-            raise ValueError("Must provide either swagger_file_path, swagger_url, or swagger_content")
-   
-    def _extract_base_url(self) -> str:
-        """Extract base URL from Swagger specification."""
-        # OpenAPI 3.0
-        if "servers" in self.swagger_data and self.swagger_data["servers"]:
-            server = self.swagger_data["servers"][0]
-            url = server.get("url", "")
-           
-            # Handle variable substitution for Azure endpoints
-            if "variables" in server:
-                for var_name, var_info in server["variables"].items():
-                    placeholder = f"{{{var_name}}}"
-                    if placeholder in url:
-                        # Use environment variable or default
-                        replacement = azure_endpoint or var_info.get("default", "")
-                        url = url.replace(placeholder, replacement)
-           
-            return url
-           
-        # Swagger 2.0
-        elif "host" in self.swagger_data:
-            scheme = self.swagger_data.get("schemes", ["https"])[0]
-            host = self.swagger_data.get("host", "")
-            base_path = self.swagger_data.get("basePath", "")
-            return f"{scheme}://{host}{base_path}"
-           
-        return azure_endpoint or "https://your-resource.openai.azure.com"
-   
-    def _resolve_reference(self, ref: str) -> Dict:
-        """Resolve $ref references in the Swagger document."""
-        if not ref.startswith("#/"):
-            return {}
-           
-        path_parts = ref[2:].split("/")
-        result = self.swagger_data
-       
-        for part in path_parts:
-            if isinstance(result, dict) and part in result:
-                result = result[part]
-            else:
-                return {}
-               
-        return result
-   
-    def _build_parameter_schema(self, parameters: List[Dict]) -> Dict[str, Any]:
-        """Build parameter schema for tool registration."""
-        properties = {}
-        required = []
-       
-        for param in parameters:
-            # Resolve reference if needed
-            if "$ref" in param:
-                param = self._resolve_reference(param["$ref"])
-           
-            param_name = param.get("name", "")
-            param_in = param.get("in", "")
-           
-            # Skip api-version as it's handled automatically for Azure
-            if param_name == "api-version":
-                continue
-           
-            # Build parameter schema
-            param_schema = {
-                "type": param.get("schema", {}).get("type", "string"),
-                "description": param.get("description", "")
-            }
-           
-            # Add enum values if present
-            if "enum" in param.get("schema", {}):
-                param_schema["enum"] = param["schema"]["enum"]
-           
-            # Add pattern if present
-            if "pattern" in param.get("schema", {}):
-                param_schema["pattern"] = param["schema"]["pattern"]
-           
-            # Add example if present
-            if "example" in param:
-                param_schema["example"] = param["example"]
-            elif "example" in param.get("schema", {}):
-                param_schema["example"] = param["schema"]["example"]
-           
-            properties[param_name] = param_schema
-           
-            if param.get("required", False):
-                required.append(param_name)
-       
-        return {
-            "type": "object",
-            "properties": properties,
-            "required": required
-        }
-   
-    def _create_tool_function(self, path: str, method: str, operation: Dict) -> Callable:
-        """Create a tool function for a specific API operation."""
-       
-        def tool_function(ctx, **kwargs) -> str:
-            """Dynamically generated tool function."""
-            try:
-                # Build URL
-                url = urljoin(self.base_url, path)
-               
-                # Process path parameters
-                path_params = {}
-                query_params = {"api-version": self.api_version}
-                headers = {
-                    "api-key": self.api_key,
-                    "Content-Type": "application/json"
-                }
-               
-                # Extract parameters
-                for param in operation.get("parameters", []):
-                    if "$ref" in param:
-                        param = self._resolve_reference(param["$ref"])
-                   
-                    param_name = param.get("name", "")
-                    param_in = param.get("in", "")
-                   
-                    if param_name in kwargs:
-                        if param_in == "path":
-                            path_params[param_name] = kwargs[param_name]
-                        elif param_in == "query":
-                            query_params[param_name] = kwargs[param_name]
-                        elif param_in == "header":
-                            headers[param_name] = kwargs[param_name]
-               
-                # Replace path parameters
-                for param_name, param_value in path_params.items():
-                    url = url.replace(f"{{{param_name}}}", str(param_value))
-               
-                # Handle request body
-                json_data = None
-                if "requestBody" in operation and method.lower() in ["post", "put", "patch"]:
-                    # For simplicity, assume JSON content
-                    body_params = {k: v for k, v in kwargs.items()
-                                 if k not in path_params and k not in query_params}
-                    if body_params:
-                        json_data = body_params
-               
-                # Make the request
-                logger.info(f"Executing {method.upper()} {url}")
-               
-                response = requests.request(
-                    method=method.upper(),
-                    url=url,
-                    headers=headers,
-                    params=query_params,
-                    json=json_data,
-                    timeout=30
-                )
-               
-                # Handle response
-                if response.status_code >= 400:
-                    error_detail = {
-                        "error": f"HTTP {response.status_code}",
-                        "message": response.text,
-                        "url": url,
-                        "method": method.upper()
-                    }
-                    return json.dumps(error_detail)
-               
-                # Return appropriate response format
-                content_type = response.headers.get("content-type", "").lower()
-                if "application/json" in content_type:
-                    return json.dumps(response.json(), indent=2)
-                elif "text/csv" in content_type:
-                    return json.dumps({
-                        "content_type": "text/csv",
-                        "content": response.text
-                    })
-                else:
-                    return json.dumps({
-                        "content_type": content_type,
-                        "content": response.text
-                    })
-                   
-            except requests.exceptions.RequestException as e:
-                logger.error(f"Request error: {str(e)}")
-                return json.dumps({
-                    "error": f"Request error: {str(e)}",
-                    "url": url if 'url' in locals() else path,
-                    "method": method.upper()
-                })
-            except Exception as e:
-                logger.error(f"Unexpected error: {str(e)}")
-                return json.dumps({
-                    "error": f"Unexpected error: {str(e)}",
-                    "method": method.upper()
-                })
-       
-        return tool_function
-   
-    def generate_and_register_tools(self) -> Dict[str, Any]:
-        """Generate and register all tools from the Swagger specification."""
-       
-        results = {
-            "api_info": {
-                "title": self.swagger_data.get("info", {}).get("title", "Unknown API"),
-                "version": self.swagger_data.get("info", {}).get("version", "1.0.0"),
-                "base_url": self.base_url
-            },
-            "registered_tools": [],
-            "errors": []
-        }
-       
-        paths = self.swagger_data.get("paths", {})
-       
-        for path, path_item in paths.items():
-            if not isinstance(path_item, dict):
-                continue
-           
-            for method in ["get", "post", "put", "patch", "delete"]:
-                if method not in path_item:
-                    continue
-               
-                operation = path_item[method]
-                operation_id = operation.get("operationId", f"{method}_{path.replace('/', '_')}")
-               
-                # Clean operation ID for use as function name
-                clean_operation_id = re.sub(r'[^a-zA-Z0-9_]', '_', operation_id)
-               
-                try:
-                    # Build parameter schema
-                    parameters = operation.get("parameters", [])
-                    param_schema = self._build_parameter_schema(parameters)
-                   
-                    # Create tool function
-                    tool_func = self._create_tool_function(path, method, operation)
-                   
-                    # Generate tool description
-                    description = f"{operation.get('summary', '')}. {operation.get('description', '')}".strip()
-                    if not description:
-                        description = f"Execute {method.upper()} {path}"
-                   
-                    # Store tool info
-                    tool_info = {
-                        "name": clean_operation_id,
-                        "operation_id": operation_id,
-                        "method": method.upper(),
-                        "path": path,
-                        "description": description,
-                        "parameters": param_schema,
-                        "tags": operation.get("tags", [])
-                    }
-                   
-                    self.registered_tools[clean_operation_id] = {
-                        "function": tool_func,
-                        "info": tool_info
-                    }
-                   
-                    results["registered_tools"].append(tool_info)
-                   
-                    logger.info(f"Registered tool: {clean_operation_id}")
-                   
-                except Exception as e:
-                    error_msg = f"Failed to register {operation_id}: {str(e)}"
-                    logger.error(error_msg)
-                    results["errors"].append(error_msg)
-       
-        return results
-   
-    def execute_tool(self, tool_name: str, **kwargs) -> str:
-        """Execute a registered tool by name."""
-        if tool_name not in self.registered_tools:
-            return json.dumps({"error": f"Tool '{tool_name}' not found"})
-       
-        tool_func = self.registered_tools[tool_name]["function"]
-        return tool_func(None, **kwargs)  # ctx=None for standalone execution
-
-
-# Global variable to store the swagger generator instance
-_swagger_generator = None
-
-
-def register_swagger_tools(swagger_file_path: str = None, swagger_url: str = None, swagger_content: str = None) -> Dict[str, Any]:
-    """
-    Main function to register all tools from a Swagger specification.
-   
-    Returns:
-        Dictionary with registration results and tool information
-    """
-    try:
-        generator = SwaggerToolGenerator(swagger_file_path, swagger_url, swagger_content)
-        results = generator.generate_and_register_tools()
-       
-        # Store generator instance for later use
-        global _swagger_generator
-        _swagger_generator = generator
-       
-        return results
-       
-    except Exception as e:
-        logger.error(f"Failed to register swagger tools: {str(e)}")
-        return {
-            "error": str(e),
-            "registered_tools": [],
-            "errors": [str(e)]
-        }
-
 
 @mcp.tool()
 def execute_dynamic_swagger_action(ctx: Context, tool_name: str, **params) -> str:
     """
     Execute a dynamically generated tool from the Swagger specification.
-   
+    
     Args:
         tool_name: Name of the tool (operation ID)
         **params: Parameters for the API call
-       
+        
     Returns:
         JSON string with the API response
     """
-    global _swagger_generator
-   
-    if _swagger_generator is None:
-        return json.dumps({"error": "No Swagger tools have been registered yet. Please call register_swagger_tools first."})
-   
-    return _swagger_generator.execute_tool(tool_name, **params)
+    swagger_generator = get_swagger_generator()
+    
+    if swagger_generator is None:
+        return json.dumps({
+            "error": "No Swagger tools have been registered",
+            "hint": "Ensure SWAGGER_PATH is set in your .env file"
+        })
+    
+    # Check if params were wrapped in a 'params' key (common MCP pattern)
+    if 'params' in params and isinstance(params['params'], dict):
+        # Unwrap the parameters
+        actual_params = params['params']
+    else:
+        # Use params as-is
+        actual_params = params
+    
+    # Log the request details before calling the API
+    try:
+        if tool_name in swagger_generator.registered_tools:
+            tool_info = swagger_generator.registered_tools[tool_name]["info"]
+            base_url = swagger_generator._extract_base_url()
+            path = tool_info.path
+            method = tool_info.method
+            
+            logger.info(f"Tool: {tool_name}")
+            logger.info(f"Base URL: {base_url}")
+            logger.info(f"Path template: {path}")
+            logger.info(f"Method: {method}")
+            logger.info(f"Parameters provided: {actual_params}")
+            
+            # Check if all required path parameters are provided
+            path_params_in_template = re.findall(r'\{(\w+)\}', path)
+            logger.info(f"Path parameters expected: {path_params_in_template}")
+            
+            for param in path_params_in_template:
+                if param not in actual_params:
+                    logger.warning(f"Missing required path parameter: {param}")
+        else:
+            logger.error(f"Tool not found: {tool_name}")
+    except Exception as e:
+        logger.warning(f"Could not log Swagger API details: {str(e)}")
+
+    # Use the unwrapped parameters
+    return swagger_generator.execute_tool(tool_name, **actual_params)
 
 
 @mcp.tool()
 def list_dynamic_swagger_tools(ctx: Context) -> str:
     """
     List all dynamically registered tools from the Swagger specification.
+    NOTE:
+    # LLM Context Note:
+    # When a user requests to "list all finetuning jobs", you (the LLM) must:
+        # 1. Call `list_dynamic_swagger_tools(ctx)` to get all available Swagger-based tools.
+        # 2. Parse the returned list and automatically select the tool whose name, path, or description matches the intent (such as "list finetuning jobs").
+        # 3. Call `execute_dynamic_swagger_action(ctx, tool_name=...)` with the selected tool's operation ID.
+        # This process is fully automated and does not require user or developer intervention.
+        # If no matching Swagger tool is found, return an error message.
     
+    # When a user requests to "get finetuning job events", you (the LLM) must:
+        # 1. Call `list_dynamic_swagger_tools(ctx)` to get all available Swagger-based tools.
+        # 2. Parse the returned list and automatically select the tool whose name, path, or description matches the intent (such as "get finetuning job events").
+        # 3. Call `execute_dynamic_swagger_action(ctx, tool_name=..., job_id=...)` with the selected tool's operation ID and required parameters.
+        # This process is fully automated and does not require user or developer intervention.
+        # If no matching Swagger tool is found, return an error message.
+    
+    # When a user requests to "fetch finetuning job status", you (the LLM) must:
+        # 1. Call `list_dynamic_swagger_tools(ctx)` to get all available Swagger-based tools.
+        # 2. Parse the returned list and automatically select the tool whose name, path, or description matches the intent (such as "fetch finetuning job status").
+        # 3. Call `execute_dynamic_swagger_action(ctx, tool_name=..., job_id=...)` with the selected tool's operation ID and required parameters.
+        # This process is fully automated and does not require user or developer intervention.
+        # If no matching Swagger tool is found, return an error message.
     Returns:
-        JSON string with list of available tools and their details
+        JSON string with list of available tools
     """
-    global _swagger_generator
+    swagger_generator = get_swagger_generator()
     
-    if _swagger_generator is None:
+    if swagger_generator is None:
         return json.dumps({
-            "error": "No Swagger tools have been registered yet",
-            "hint": "Call register_swagger_tools with a swagger file path first"
+            "error": "No Swagger tools have been registered",
+            "hint": "Ensure SWAGGER_PATH is set in your .env file"
         })
     
     tools_list = []
-    for tool_name, tool_data in _swagger_generator.registered_tools.items():
+    for tool_name, tool_data in swagger_generator.registered_tools.items():
         info = tool_data["info"]
         tools_list.append({
             "name": tool_name,
-            "method": info["method"],
-            "path": info["path"],
-            "description": info["description"],
-            "parameters": list(info["parameters"]["properties"].keys()),
-            "required_params": info["parameters"]["required"]
+            "method": info.method,
+            "path": info.path,
+            "description": info.description,
+            "parameters": list(info.parameters["properties"].keys())
         })
     
     return json.dumps({
         "total_tools": len(tools_list),
         "tools": tools_list,
-        "base_url": _swagger_generator.base_url,
-        "api_info": {
-            "title": _swagger_generator.swagger_data.get("info", {}).get("title", "Unknown API"),
-            "version": _swagger_generator.swagger_data.get("info", {}).get("version", "1.0.0")
-        }
+        "base_url": swagger_generator.base_url
     }, indent=2)
-
-
-@mcp.tool()
-def register_swagger_from_file(ctx: Context, swagger_path: str) -> str:
-    """
-    Register all tools from a Swagger/OpenAPI specification file.
-    
-    Args:
-        swagger_path: Path to the swagger file (JSON or YAML)
-        
-    Returns:
-        JSON string with registration results
-    """
-    try:
-        results = register_swagger_tools(swagger_file_path=swagger_path)
-        
-        if "error" in results:
-            return json.dumps(results)
-            
-        return json.dumps({
-            "success": True,
-            "message": f"Successfully registered {len(results['registered_tools'])} tools",
-            "api_info": results["api_info"],
-            "tools_count": len(results["registered_tools"]),
-            "errors_count": len(results["errors"]),
-            "hint": "Use list_dynamic_swagger_tools to see all available tools"
-        })
-        
-    except Exception as e:
-        logger.error(f"Failed to register swagger tools: {str(e)}")
-        return json.dumps({
-            "success": False,
-            "error": str(e)
-        })
-
-
-# Auto-register tools on module import if swagger file is available
-swagger_path = os.environ.get("SWAGGER_PATH", "")
-if swagger_path and os.path.exists(swagger_path):
-    logger.info(f"Auto-registering tools from {swagger_path}")
-    try:
-        register_swagger_tools(swagger_file_path=swagger_path)
-        logger.info("Successfully auto-registered swagger tools")
-    except Exception as e:
-        logger.error(f"Failed to auto-register swagger tools: {str(e)}")
