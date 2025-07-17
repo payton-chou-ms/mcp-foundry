@@ -5,7 +5,7 @@ from argparse import ArgumentParser
 from typing import Literal
 from dotenv import load_dotenv
 from .mcp_server import mcp, auto_import_modules
-from .mcp_server import auto_register_swagger_tools
+from .mcp_foundry_finetuning.swagger import auto_register_swagger_tools
 
 
 # Configure logging
