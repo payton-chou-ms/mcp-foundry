@@ -13,13 +13,7 @@ from .data_access_objects import SearchIndexDao, SearchClientDao, SearchIndexerD
     OperationResult, \
     SearchDocument
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    stream=sys.stderr,
-)
-logger = logging.getLogger("mcp_foundry_knowledge")
+logger = logging.getLogger(__name__)
 
 @mcp.tool(description="Reads the content of a local file and returns it as a string")
 def fk_fetch_local_file_contents(file_path: str, encoding: str = "utf-8") -> str:

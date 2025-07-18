@@ -34,8 +34,7 @@ from mcp_foundry.mcp_foundry_model.models import ModelsList
 
 dotenv.load_dotenv()
 
-logger = logging.getLogger("mcp_foundry")
-logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 labs_api_url = os.environ.get("LABS_API_URL", "https://foundry-labs-mcp-api.azurewebsites.net/api/v1")
 
