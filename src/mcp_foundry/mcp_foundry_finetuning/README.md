@@ -62,7 +62,7 @@ Dynamic tools are generated automatically from the Swagger specification (`swagg
    - Define request/response schemas in the `components` section for better validation and documentation.
 
 3. **Set the Swagger path:**
-   - Ensure the `SWAGGER_PATH` environment variable is set to the path of your `swagger.yaml` file (usually in your `.env`).
+   - Ensure the `SWAGGER_PATH` environment variable is set to the path of your `swagger.yaml` file (found in `.env`).
    - Example: `SWAGGER_PATH=./swagger.yaml`
 
 4. **Restart the MCP server:**

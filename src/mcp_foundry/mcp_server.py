@@ -6,7 +6,13 @@ from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP("azure-ai-foundry-mcp-server")
 
-logger = logging.getLogger(__name__)
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    stream=sys.stderr,
+)
+logger = logging.getLogger("mcp_server")
 
 def auto_import_modules(base_package: str, targets: list[str]):
     """
@@ -31,3 +37,4 @@ def auto_import_modules(base_package: str, targets: list[str]):
                 logger.warning(f"⚠️ Skipping {module_name} (not found)")
             except Exception as e:
                 logger.error(f"❌ Error importing {module_name}: {e}")
+ 
