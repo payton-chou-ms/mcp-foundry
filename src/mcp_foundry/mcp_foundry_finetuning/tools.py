@@ -9,7 +9,7 @@ from typing import Dict, List, Any, Callable, Optional, Union
 from urllib.parse import urljoin, quote
 import re
 from mcp.server.fastmcp import Context
-from ..swagger import auto_register_swagger_tools, get_swagger_generator
+from .swagger import auto_register_swagger_tools, get_swagger_generator
 from dotenv import load_dotenv
 
 # Configure logging (following the pattern from other tools)
@@ -29,7 +29,119 @@ auto_register_swagger_tools()
 azure_endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
 api_version = os.environ.get("AZURE_OPENAI_API_VERSION")
 api_key = os.environ.get("AZURE_OPENAI_API_KEY")
- 
+
+@mcp.tool()
+def execute_dynamic_swagger_action(ctx: Context, tool_name: str, **params) -> str:
+    """
+    Execute a dynamically generated tool from the Swagger specification.
+    
+    Args:
+        tool_name: Name of the tool (operation ID)
+        **params: Parameters for the API call
+        
+    Returns:
+        JSON string with the API response
+    """
+    swagger_generator = get_swagger_generator()
+    
+    if swagger_generator is None:
+        return json.dumps({
+            "error": "No Swagger tools have been registered",
+            "hint": "Ensure SWAGGER_PATH is set in your .env file"
+        })
+    
+    # Check if params were wrapped in a 'params' key (common MCP pattern)
+    if 'params' in params and isinstance(params['params'], dict):
+        # Unwrap the parameters
+        actual_params = params['params']
+    else:
+        # Use params as-is
+        actual_params = params
+    
+    # Log the request details before calling the API
+    try:
+        if tool_name in swagger_generator.registered_tools:
+            tool_info = swagger_generator.registered_tools[tool_name]["info"]
+            base_url = swagger_generator._extract_base_url()
+            path = tool_info.path
+            method = tool_info.method
+            
+            logger.info(f"Tool: {tool_name}")
+            logger.info(f"Base URL: {base_url}")
+            logger.info(f"Path template: {path}")
+            logger.info(f"Method: {method}")
+            logger.info(f"Parameters provided: {actual_params}")
+            
+            # Check if all required path parameters are provided
+            path_params_in_template = re.findall(r'\{(\w+)\}', path)
+            logger.info(f"Path parameters expected: {path_params_in_template}")
+            
+            for param in path_params_in_template:
+                if param not in actual_params:
+                    logger.warning(f"Missing required path parameter: {param}")
+        else:
+            logger.error(f"Tool not found: {tool_name}")
+    except Exception as e:
+        logger.warning(f"Could not log Swagger API details: {str(e)}")
+
+    # Use the unwrapped parameters
+    return swagger_generator.execute_tool(tool_name, **actual_params)
+
+
+@mcp.tool()
+def list_dynamic_swagger_tools(ctx: Context) -> str:
+    """
+    List all dynamically registered tools from the Swagger specification.
+    NOTE:
+    # LLM Context Note:
+    # When a user requests to "list all finetuning jobs", you (the LLM) must:
+        # 1. Call `list_dynamic_swagger_tools(ctx)` to get all available Swagger-based tools.
+        # 2. Parse the returned list and automatically select the tool whose name, path, or description matches the intent (such as "list finetuning jobs").
+        # 3. Call `execute_dynamic_swagger_action(ctx, tool_name=...)` with the selected tool's operation ID.
+        # This process is fully automated and does not require user or developer intervention.
+        # If no matching Swagger tool is found, return an error message.
+    
+    # When a user requests to "get finetuning job events", you (the LLM) must:
+        # 1. Call `list_dynamic_swagger_tools(ctx)` to get all available Swagger-based tools.
+        # 2. Parse the returned list and automatically select the tool whose name, path, or description matches the intent (such as "get finetuning job events").
+        # 3. Call `execute_dynamic_swagger_action(ctx, tool_name=..., job_id=...)` with the selected tool's operation ID and required parameters.
+        # This process is fully automated and does not require user or developer intervention.
+        # If no matching Swagger tool is found, return an error message.
+    
+    # When a user requests to "fetch finetuning job status", you (the LLM) must:
+        # 1. Call `list_dynamic_swagger_tools(ctx)` to get all available Swagger-based tools.
+        # 2. Parse the returned list and automatically select the tool whose name, path, or description matches the intent (such as "fetch finetuning job status").
+        # 3. Call `execute_dynamic_swagger_action(ctx, tool_name=..., job_id=...)` with the selected tool's operation ID and required parameters.
+        # This process is fully automated and does not require user or developer intervention.
+        # If no matching Swagger tool is found, return an error message.
+    Returns:
+        JSON string with list of available tools
+    """
+    swagger_generator = get_swagger_generator()
+    
+    if swagger_generator is None:
+        return json.dumps({
+            "error": "No Swagger tools have been registered",
+            "hint": "Ensure SWAGGER_PATH is set in your .env file"
+        })
+    
+    tools_list = []
+    for tool_name, tool_data in swagger_generator.registered_tools.items():
+        info = tool_data["info"]
+        tools_list.append({
+            "name": tool_name,
+            "method": info.method,
+            "path": info.path,
+            "description": info.description,
+            "parameters": list(info.parameters["properties"].keys())
+        })
+    
+    return json.dumps({
+        "total_tools": len(tools_list),
+        "tools": tools_list,
+        "base_url": swagger_generator.base_url
+    }, indent=2)
+
 @mcp.tool()
 def list_finetuning_jobs(ctx: Context):
     """
@@ -254,115 +366,3 @@ def list_finetuning_files(ctx: Context, purpose: str = "fine-tune") -> str:
         return json.dumps({
             "error": f"Unexpected error: {str(e)}"
         })
-
-@mcp.tool()
-def execute_dynamic_swagger_action(ctx: Context, tool_name: str, **params) -> str:
-    """
-    Execute a dynamically generated tool from the Swagger specification.
-    
-    Args:
-        tool_name: Name of the tool (operation ID)
-        **params: Parameters for the API call
-        
-    Returns:
-        JSON string with the API response
-    """
-    swagger_generator = get_swagger_generator()
-    
-    if swagger_generator is None:
-        return json.dumps({
-            "error": "No Swagger tools have been registered",
-            "hint": "Ensure SWAGGER_PATH is set in your .env file"
-        })
-    
-    # Check if params were wrapped in a 'params' key (common MCP pattern)
-    if 'params' in params and isinstance(params['params'], dict):
-        # Unwrap the parameters
-        actual_params = params['params']
-    else:
-        # Use params as-is
-        actual_params = params
-    
-    # Log the request details before calling the API
-    try:
-        if tool_name in swagger_generator.registered_tools:
-            tool_info = swagger_generator.registered_tools[tool_name]["info"]
-            base_url = swagger_generator._extract_base_url()
-            path = tool_info.path
-            method = tool_info.method
-            
-            logger.info(f"Tool: {tool_name}")
-            logger.info(f"Base URL: {base_url}")
-            logger.info(f"Path template: {path}")
-            logger.info(f"Method: {method}")
-            logger.info(f"Parameters provided: {actual_params}")
-            
-            # Check if all required path parameters are provided
-            path_params_in_template = re.findall(r'\{(\w+)\}', path)
-            logger.info(f"Path parameters expected: {path_params_in_template}")
-            
-            for param in path_params_in_template:
-                if param not in actual_params:
-                    logger.warning(f"Missing required path parameter: {param}")
-        else:
-            logger.error(f"Tool not found: {tool_name}")
-    except Exception as e:
-        logger.warning(f"Could not log Swagger API details: {str(e)}")
-
-    # Use the unwrapped parameters
-    return swagger_generator.execute_tool(tool_name, **actual_params)
-
-
-@mcp.tool()
-def list_dynamic_swagger_tools(ctx: Context) -> str:
-    """
-    List all dynamically registered tools from the Swagger specification.
-    NOTE:
-    # LLM Context Note:
-    # When a user requests to "list all finetuning jobs", you (the LLM) must:
-        # 1. Call `list_dynamic_swagger_tools(ctx)` to get all available Swagger-based tools.
-        # 2. Parse the returned list and automatically select the tool whose name, path, or description matches the intent (such as "list finetuning jobs").
-        # 3. Call `execute_dynamic_swagger_action(ctx, tool_name=...)` with the selected tool's operation ID.
-        # This process is fully automated and does not require user or developer intervention.
-        # If no matching Swagger tool is found, return an error message.
-    
-    # When a user requests to "get finetuning job events", you (the LLM) must:
-        # 1. Call `list_dynamic_swagger_tools(ctx)` to get all available Swagger-based tools.
-        # 2. Parse the returned list and automatically select the tool whose name, path, or description matches the intent (such as "get finetuning job events").
-        # 3. Call `execute_dynamic_swagger_action(ctx, tool_name=..., job_id=...)` with the selected tool's operation ID and required parameters.
-        # This process is fully automated and does not require user or developer intervention.
-        # If no matching Swagger tool is found, return an error message.
-    
-    # When a user requests to "fetch finetuning job status", you (the LLM) must:
-        # 1. Call `list_dynamic_swagger_tools(ctx)` to get all available Swagger-based tools.
-        # 2. Parse the returned list and automatically select the tool whose name, path, or description matches the intent (such as "fetch finetuning job status").
-        # 3. Call `execute_dynamic_swagger_action(ctx, tool_name=..., job_id=...)` with the selected tool's operation ID and required parameters.
-        # This process is fully automated and does not require user or developer intervention.
-        # If no matching Swagger tool is found, return an error message.
-    Returns:
-        JSON string with list of available tools
-    """
-    swagger_generator = get_swagger_generator()
-    
-    if swagger_generator is None:
-        return json.dumps({
-            "error": "No Swagger tools have been registered",
-            "hint": "Ensure SWAGGER_PATH is set in your .env file"
-        })
-    
-    tools_list = []
-    for tool_name, tool_data in swagger_generator.registered_tools.items():
-        info = tool_data["info"]
-        tools_list.append({
-            "name": tool_name,
-            "method": info.method,
-            "path": info.path,
-            "description": info.description,
-            "parameters": list(info.parameters["properties"].keys())
-        })
-    
-    return json.dumps({
-        "total_tools": len(tools_list),
-        "tools": tools_list,
-        "base_url": swagger_generator.base_url
-    }, indent=2)

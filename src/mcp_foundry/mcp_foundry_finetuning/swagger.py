@@ -23,13 +23,10 @@ logger = logging.getLogger("mcp_foundry_finetuning")
 # Load environment variables
 load_dotenv()
 
-def get_azure_config():
-    """Fetch Azure OpenAI config from environment variables each time it's called."""
-    return {
-        "azure_endpoint": os.environ.get("AZURE_OPENAI_ENDPOINT"),
-        "api_version": os.environ.get("AZURE_OPENAI_API_VERSION"),
-        "api_key": os.environ.get("AZURE_OPENAI_API_KEY"),
-    }
+# Use consistent environment variable names following the codebase pattern
+azure_endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
+api_version = os.environ.get("AZURE_OPENAI_API_VERSION")
+api_key = os.environ.get("AZURE_OPENAI_API_KEY")
 
 class HttpMethod(Enum):
     """HTTP methods supported by the API."""
@@ -64,15 +61,22 @@ class SwaggerToolGenerator:
             FileNotFoundError: If swagger file doesn't exist
             ValueError: If parsing fails
         """
+
+        # Initialize registered_tools dictionary
+        self.registered_tools = {}
+
+        # Set instance attributes for Azure config
+        self.api_key = api_key
+        self.api_version = api_version
+        self.azure_endpoint = azure_endpoint
+
+        # Load and store the swagger YAML data
         self.swagger_data = self._load_yaml_file(swagger_file_path)
-        config = get_azure_config()
-        self.base_url = self._extract_base_url(config)
-        self.api_key = config["api_key"]
-        self.api_version = config["api_version"]
-        self.registered_tools: Dict[str, Dict[str, Any]] = {}
+        # Set the base_url attribute
+        self.base_url = self._extract_base_url()
 
         # Validate required Azure configuration
-        if not all([self.api_key, self.api_version, config["azure_endpoint"]]):
+        if not all([self.api_key, self.api_version, self.azure_endpoint]):
             logger.warning(
                 "Missing Azure OpenAI configuration. "
                 "Ensure AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY, and AZURE_OPENAI_API_VERSION are set."
@@ -101,9 +105,8 @@ class SwaggerToolGenerator:
             raise ValueError(f"Error reading swagger file: {str(e)}")
 
     def _extract_base_url(self, config=None) -> str:
-        if config is None:
-            config = get_azure_config()
-        azure_endpoint = config["azure_endpoint"]
+        azure_endpoint = self.azure_endpoint
+        api_key = self.api_key
         
         # Ensure the endpoint doesn't have trailing slashes
         if azure_endpoint:
@@ -213,12 +216,9 @@ class SwaggerToolGenerator:
     ) -> Callable[[Any], str]:
         def tool_function(**kwargs) -> str:
             try:
-                config = get_azure_config()
-                api_key = config["api_key"]
-                api_version = config["api_version"]
-                base_url = self._extract_base_url(config)
+                base_url = self._extract_base_url()
 
-                if not all([api_key, api_version, base_url]):
+                if not all([self.api_key, self.api_version, base_url]):
                     return json.dumps({
                         "error": "Azure OpenAI configuration not properly set",
                         "required": ["AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_API_KEY", "AZURE_OPENAI_API_VERSION"]
@@ -230,7 +230,7 @@ class SwaggerToolGenerator:
                 path_params = {}
                 query_params = {"api-version": api_version}
                 headers = {
-                    "api-key": api_key,
+                    "api-key": self.api_key,
                     "Content-Type": "application/json"
                 }
                 body_params = {}
