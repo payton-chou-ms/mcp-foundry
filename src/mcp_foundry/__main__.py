@@ -1,6 +1,5 @@
 import logging
 import os
-import io
 import sys
 from argparse import ArgumentParser
 from typing import Literal

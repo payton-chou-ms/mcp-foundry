@@ -1,7 +1,6 @@
 import importlib
 import os
 import logging
-import io
 import sys
 from mcp.server.fastmcp import FastMCP
 
