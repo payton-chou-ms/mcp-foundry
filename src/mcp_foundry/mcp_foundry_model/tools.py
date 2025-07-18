@@ -28,13 +28,7 @@ from .utils import (
 
 labs_api_url = os.environ.get("LABS_API_URL", "https://foundry-labs-mcp-api.azurewebsites.net/api/v1")
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    stream=sys.stderr,
-)
-logger = logging.getLogger("mcp_foundry_model")
+logger = logging.getLogger(__name__)
 
 @mcp.tool()
 async def list_models_from_model_catalog(ctx: Context, search_for_free_playground: bool = False, publisher_name = "", license_name = "") -> str:

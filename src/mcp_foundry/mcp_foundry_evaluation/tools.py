@@ -49,14 +49,7 @@ from dotenv import load_dotenv
 
 from mcp_foundry.mcp_server import mcp
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    stream=sys.stderr,
-)
-logger = logging.getLogger("mcp_foundry_evaluation")
-
+logger = logging.getLogger(__name__)
 
 # Configure PromptFlow logging to go to stderr
 def configure_promptflow_logging():
