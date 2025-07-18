@@ -4,17 +4,13 @@ import sys
 from argparse import ArgumentParser
 from typing import Literal
 from dotenv import load_dotenv
+
+from mcp_foundry.logging_config import configure_utf8_logging
+configure_utf8_logging()
+
+logger = logging.getLogger(__name__)
+
 from .mcp_server import mcp, auto_import_modules
-from .mcp_foundry_finetuning.swagger import auto_register_swagger_tools
-
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    stream=sys.stderr,
-)
-logger = logging.getLogger("__main__")
 
 def main() -> None:
     """Runs the MCP server"""
@@ -44,7 +40,6 @@ def main() -> None:
 
     # Run this on startup
     auto_import_modules("mcp_foundry", targets=["tools", "resources", "prompts"])
-    auto_register_swagger_tools()
     mcp.run(transport=specified_transport)
 
 

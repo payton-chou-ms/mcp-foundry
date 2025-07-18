@@ -9,10 +9,8 @@ from typing import Dict, List, Any, Callable, Optional, Union
 from urllib.parse import urljoin, quote
 import re
 from mcp.server.fastmcp import Context
-from .swagger import get_swagger_generator
+from ..swagger import auto_register_swagger_tools, get_swagger_generator
 from dotenv import load_dotenv
-from dataclasses import dataclass
-from enum import Enum
 
 # Configure logging (following the pattern from other tools)
 logging.basicConfig(
@@ -23,6 +21,9 @@ logging.basicConfig(
 logger = logging.getLogger("mcp_foundry_finetuning")
  
 load_dotenv()
+
+# Automatically register Swagger tools on startup
+auto_register_swagger_tools()
  
 # Use consistent environment variable names following the codebase pattern
 azure_endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
