@@ -111,7 +111,7 @@ A Model Context Protocol server for Azure AI Foundry, providing a unified set of
 
 > [This GitHub template](https://github.com/azure-ai-foundry/foundry-mcp-playground) has minimal setup with MCP server configuration and all required dependencies, making it easy to get started with your own projects.
 
-[![Install in VS Code](https://img.shields.io/static/v1?style=for-the-badge&label=Install+in+VS+Code&message=Open&color=007ACC&logo=visualstudiocode)](https://insiders.vscode.dev/redirect/mcp/install?name=Azure%20Foundry%20MCP%20Server&config=%7B%22type%22%3A%22stdio%22%2C%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22--prerelease%3Dallow%22%2C%22--from%22%2C%22git%2Bhttps%3A%2F%2Fgithub.com%2Fazure-ai-foundry%2Fmcp-foundry.git%22%2C%22run-azure-ai-foundry-mcp%22%5D%7D)
+[![Install in VS Code](https://img.shields.io/static/v1?style=for-the-badge&label=Install+in+VS+Code&message=Open&color=007ACC&logo=visualstudiocode)](https://insiders.vscode.dev/redirect/mcp/install?name=Azure%20AI%20Foundry%20MCP%20Server&config=%7B%22type%22%3A%22stdio%22%2C%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22--prerelease%3Dallow%22%2C%22--from%22%2C%22git%2Bhttps%3A%2F%2Fgithub.com%2Fazure-ai-foundry%2Fmcp-foundry.git%22%2C%22run-azure-ai-foundry-mcp%22%5D%7D)
 
 > This helps you automatically set up the MCP server in your VS Code environment under user settings.
 > You will need `uvx` installed in your environment to run the server.
