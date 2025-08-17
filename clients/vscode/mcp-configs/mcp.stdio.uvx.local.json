@@ -1,0 +1,19 @@
+{
+    "servers": {
+        "mcp_foundry_server": {
+            "type": "stdio",
+            "command": "uvx",
+            "args": [
+                "--no-cache",
+                "--prerelease=allow",
+                "--directory",
+                "${workspaceFolder}",
+                "--from",
+                ".",
+                "run-azure-ai-foundry-mcp",
+                "--envFile",
+                ".env"
+            ]
+        }
+    }
+}

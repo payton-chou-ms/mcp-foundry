@@ -1,0 +1,7 @@
+{
+    "name": "Foundry MCP Development Environment",
+    "build": {
+        "dockerfile": "Dockerfile"
+    },
+    "remoteUser": "vscode"
+}
